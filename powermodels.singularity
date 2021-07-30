@@ -1,0 +1,88 @@
+Bootstrap: docker
+
+From: nvidia/cuda:10.0-cudnn7-devel-ubuntu16.04
+
+%post
+export HOME=/opt/julia/juliahome/
+CURDIR=`pwd`
+CPATH=/usr/local/cuda_tmp/include:
+PATH=/usr/local/cuda_tmp/bin:$PATH
+
+apt-get update
+apt-get install -y tmux nano git wget
+
+wget https://julialang-s3.julialang.org/bin/linux/x64/1.0/julia-1.0.4-linux-x86_64.tar.gz
+tar xzf julia-1.0.4-linux-x86_64.tar.gz
+mv julia-1.0.4 /opt/julia
+rm -r julia-1.0.4-linux-x86_64.tar.gz
+echo 'export PATH=/opt/julia/bin:$PATH' >> $SINGULARITY_ENVIRONMENT
+export PATH=/opt/julia/bin:$PATH
+
+echo 'export JULIA_DEPOT_PATH=/opt/julia/.julia/' >> $SINGULARITY_ENVIRONMENT
+export JULIA_DEPOT_PATH=/opt/julia/.julia/
+
+julia -e 'using Pkg; Pkg.activate("/opt/julia/.julia"); Pkg.add(["Pkg", "Ipopt", "PowerModels", "JSON", "SCS", "Cbc", "JuMP", "Libdl", "REPL"])'
+
+echo 'export JULIA_LOAD_PATH=/opt/julia/.julia/' >> $SINGULARITY_ENVIRONMENT
+export JULIA_LOAD_PATH=/opt/julia/.julia/
+
+# python 3.7.2 julia-compatible
+apt-get install -y --no-install-recommends make build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev wget curl llvm libncurses5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev
+export PYENV_ROOT=/opt/pyenv
+curl -L https://github.com/pyenv/pyenv-installer/raw/master/bin/pyenv-installer | bash
+export PATH="/opt/pyenv/bin:$PATH"
+echo 'export PATH=/opt/pyenv/versions/3.7.2/bin/:$PATH' >> $SINGULARITY_ENVIRONMENT
+export PATH=/opt/pyenv/versions/3.7.2/bin/:$PATH
+PYTHON_CONFIGURE_OPTS="--enable-shared" pyenv install 3.7.2
+
+julia -e 'ENV["PYTHON"]="/opt/pyenv/versions/3.7.2/bin/python"; import Pkg; Pkg.activate("/opt/julia/.julia"); Pkg.add("PyCall"); Pkg.build("PyCall"); using PyCall'
+julia -e 'using PyCall'
+pip install julia
+
+# chmod -R 777 /opt/julia/.julia/compiled/
+
+pip install numpy==1.20.2 ruamel.yaml==0.16.1 portalocker==1.5.1 pyyaml==5.1.2 seaborn==0.9.0 ipython==7.7.0 scikit-image==0.15.0 dill==0.3.0 beautifultable==0.7.0 requests==2.22.0 pandas==1.2.3
+
+pip install torch==1.2.0 torchvision==0.4.0 Pillow==6.1.0
+
+mkdir -p /tmp/sing_build_cuda
+cd /tmp/sing_build_cuda
+
+git clone https://github.com/rusty1s/pytorch_scatter.git && \
+    cd ./pytorch_scatter && \
+    git checkout v1.3.1 && \
+    python3 ./setup.py install && \
+    cd ..
+
+git clone https://github.com/rusty1s/pytorch_sparse.git && \
+    cd ./pytorch_sparse && \
+    git checkout v0.4.0 && \
+    python3 ./setup.py install && \
+    cd ..
+
+
+git clone https://github.com/rusty1s/pytorch_cluster.git && \
+    cd ./pytorch_cluster && \
+    git checkout v1.4.4 && \
+    python3 ./setup.py install && \
+    cd ..
+
+git clone https://github.com/rusty1s/pytorch_spline_conv.git && \
+    cd ./pytorch_spline_conv && \
+    git checkout v1.1.0 && \
+    python3 ./setup.py install && \
+    cd ..
+
+git clone https://github.com/rusty1s/pytorch_geometric.git && \
+    cd ./pytorch_geometric && \
+    git checkout v1.3.1 && \
+    python3 ./setup.py install && \
+    cd ..
+
+cd $CURDIR
+rm -rf /tmp/sing_build_cuda
+
+echo 'export LD_PRELOAD=/opt/julia/lib/julia/libstdc++.so.6' >> $SINGULARITY_ENVIRONMENT
+echo 'export PYTHON=/opt/pyenv/versions/3.7.2/bin/python' >> $SINGULARITY_ENVIRONMENT
+echo 'export PATH=/opt/julia/bin/:$PATH' >> $SINGULARITY_ENVIRONMENT
+echo 'export LD_LIBRARY_PATH=/opt/julia/lib/:$LD_LIBRARY_PATH' >> $SINGULARITY_ENVIRONMENT
